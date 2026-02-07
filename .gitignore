@@ -1,46 +1,48 @@
 # =========================
-# Node / npm
-# =========================
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# =========================
-# Build / dist
-# =========================
-dist/
-build/
-
-# =========================
-# Vite
-# =========================
-.vite/
-
-# =========================
-# Environment variables
-# =========================
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# =========================
-# Logs
-# =========================
-logs
-*.log
-
-# =========================
-# OS files
+# GLOBAL
 # =========================
 .DS_Store
 Thumbs.db
+*.log
 
 # =========================
-# Editor / IDE
+# FRONTEND (React / Vite)
+# =========================
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+
+frontend/.env
+frontend/.env.local
+frontend/.env.development
+frontend/.env.production
+
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# =========================
+# BACKEND (Python / FastAPI)
+# =========================
+backend/venv/
+backend/__pycache__/
+backend/.env
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+
+backend/models/*.bin
+backend/models/*.pt
+backend/models/*.h5
+
+backend/database.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# =========================
+# IDE / Editors
 # =========================
 .vscode/
 .idea/
@@ -53,11 +55,7 @@ Thumbs.db
 *.tsbuildinfo
 
 # =========================
-# Coverage / tests
+# Tests / Coverage
 # =========================
 coverage/
-
-# =========================
-# Misc
-# =========================
-*.lock
+.pytest_cache/

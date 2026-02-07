@@ -172,39 +172,69 @@ export default function App() {
   }, [stopSpeaking, stopListening]);
 
   // Message de bienvenue initial
-  useEffect(() => {
-    if (isInitializedRef.current) return;
+  // Dans App.tsx, modifiez le useEffect de message de bienvenue initial :
+
+// Message de bienvenue initial
+useEffect(() => {
+  if (isInitializedRef.current) return;
+  
+  clearAllTimeouts();
+  
+  // Arrêter toute parole ou écoute en cours
+  stopSpeaking();
+  stopListening();
+  
+  const hasVisited = localStorage.getItem('hasVisited');
+  const delay = 2000; // Délai initial augmenté
+  
+  const timer = setTimeout(() => {
+    const message = hasVisited ? t.welcome : t.onboarding + ' ' + t.welcome;
+    speak(message);
+    setLastMessage(message);
+    setLastAction('App started');
     
-    clearAllTimeouts();
+    if (!hasVisited) {
+      localStorage.setItem('hasVisited', 'true');
+    }
     
-    // Arrêter toute parole ou écoute en cours
-    stopSpeaking();
-    stopListening();
-    
-    const hasVisited = localStorage.getItem('hasVisited');
-    const delay = 2000; // Délai initial augmenté
-    
-    const timer = setTimeout(() => {
-      const message = hasVisited ? t.welcome : t.onboarding + ' ' + t.welcome;
-      speak(message);
-      setLastMessage(message);
-      setLastAction('App started');
-      
-      if (!hasVisited) {
-        localStorage.setItem('hasVisited', 'true');
+    // IMPORTANT: Attendre que la parole soit terminée avant de redémarrer l'écoute
+    // Écouter l'événement onend de la synthèse vocale
+    const checkSpeechEnded = setInterval(() => {
+      if (!isSpeakingRef.current) {
+        clearInterval(checkSpeechEnded);
+        
+        // Attendre encore 1 seconde après la fin de la parole
+        restartTimeoutRef.current = setTimeout(() => {
+          if (permissionStatus === 'granted' && !isSpeakingRef.current) {
+            console.log('Starting listening after welcome message');
+            startListening();
+          }
+          isInitializedRef.current = true;
+        }, 1000);
       }
-      
-      // Redémarrer l'écoute après le message
+    }, 500); // Vérifier toutes les 500ms
+    
+    // Timeout de sécurité au cas où isSpeakingRef ne se mettrait pas à jour
+    const safetyTimeout = setTimeout(() => {
+      clearInterval(checkSpeechEnded);
       restartTimeoutRef.current = setTimeout(() => {
-        if (permissionStatus === 'granted' && !isSpeakingRef.current) {
+        if (permissionStatus === 'granted') {
+          console.log('Safety timeout: Starting listening');
           startListening();
         }
         isInitializedRef.current = true;
-      }, 5000); // Délai long pour le message initial
-    }, delay);
+      }, 2000);
+    }, 10000); // Timeout de sécurité après 10 secondes
     
-    return () => clearTimeout(timer);
-  }, []);
+    // Nettoyer le timeout de sécurité
+    return () => {
+      clearTimeout(safetyTimeout);
+      clearInterval(checkSpeechEnded);
+    };
+  }, delay);
+  
+  return () => clearTimeout(timer);
+}, []);
 
   // Gérer les transitions entre parole et écoute
   useEffect(() => {

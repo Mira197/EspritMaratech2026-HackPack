@@ -1,5 +1,6 @@
 // src/app/hooks/useVoiceRecognition.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSoundFeedback } from './useSoundFeedback';
 
 // Définir l'interface pour SpeechRecognitionResult
 interface SpeechRecognitionResult {
@@ -52,6 +53,7 @@ declare global {
 }
 
 export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
+  const { playBeep } = useSoundFeedback();
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -179,7 +181,11 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
     };
 
     recognition.onend = () => {
-      console.log('Speech recognition ended');
+        playBeep('stop');   // ça c’est OK après
+  console.log('Speech recognition ended');
+
+  playBeep('stop');   // 🔥 signal fermeture micro
+
       if (!isMountedRef.current) return;
       
       setIsListening(false);
@@ -189,10 +195,14 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
     };
 
     recognition.onstart = () => {
-      console.log('Speech recognition started');
-      if (!isMountedRef.current) return;
-      
-      setIsListening(true);
+  console.log('Speech recognition started');
+
+  playBeep('start');   // 🔥 ICI LE SIGNAL SONORE
+
+  if (!isMountedRef.current) return;
+
+  setIsListening(true);
+
       setError(null);
       lastTranscriptRef.current = '';
       setTranscript('');
@@ -224,7 +234,6 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
     return;
   }
 
-  // 🛑 PROTECTION PRINCIPALE
   if (!recognitionRef.current) return;
   if (isListening || isProcessing) {
     console.log('Already listening → skip start()');
@@ -232,16 +241,22 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
   }
 
   try {
-    // Reset propre
-    setTranscript('');
-    setError(null);
-    lastTranscriptRef.current = '';
+    // 🟢 1. D'abord le signal sonore
+    playBeep('start');
 
-    recognitionRef.current.start();   // ← un seul appel possible
-    console.log('Recognition started');
+    // 🟢 2. Petit délai AVANT d’ouvrir le micro
+    setTimeout(() => {
+
+      setTranscript('');
+      setError(null);
+      lastTranscriptRef.current = '';
+
+      recognitionRef.current?.start();
+      console.log('Recognition started AFTER beep');
+
+    }, 300);   // ← délai parfait pour malvoyants
 
   } catch (error: any) {
-    // 🟢 On ignore PROPREMENT l’erreur qui te bloque
     if (error.name === 'InvalidStateError') {
       console.log('Recognition already started (ignored)');
       return;
@@ -256,7 +271,7 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
       setError('failed-to-start');
     }
   }
-}, [isListening, isProcessing, permissionStatus]);
+}, [isListening, isProcessing, permissionStatus, playBeep]);
 
 
   // Fonction pour arrêter l'écoute
