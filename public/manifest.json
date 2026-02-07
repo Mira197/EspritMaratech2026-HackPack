@@ -1,0 +1,41 @@
+{
+  "name": "Assistant Vocal Accessible - المساعد الصوتي الشامل",
+  "short_name": "Assistant Vocal",
+  "description": "Application vocale accessible pour les personnes malvoyantes et seniors - تطبيق صوتي يمكن الوصول إليه للمكفوفين وكبار السن",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3B82F6",
+  "orientation": "any",
+  "lang": "fr-FR",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["accessibility", "utilities", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Module Bancaire",
+      "short_name": "Banque",
+      "description": "Ouvrir le module bancaire",
+      "url": "/?module=banking"
+    },
+    {
+      "name": "Liste de Courses",
+      "short_name": "Courses",
+      "description": "Ouvrir la liste de courses",
+      "url": "/?module=shopping"
+    }
+  ]
+}

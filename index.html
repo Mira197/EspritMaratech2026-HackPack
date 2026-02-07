@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#3B82F6" />
+    <meta name="description" content="Application vocale accessible pour les personnes malvoyantes et seniors. Banque et liste de courses par commande vocale." />
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Apple PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Assistant Vocal" />
+    
+    <!-- Accessibility Meta Tags -->
+    <meta name="accessibility" content="WCAG 2.1 AA compliant, Screen reader compatible, Voice-first interface" />
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="Assistant Vocal Accessible" />
+    <meta property="og:description" content="Application vocale pour personnes malvoyantes et seniors" />
+    <meta property="og:type" content="website" />
+    
+    <title>Assistant Vocal Accessible - المساعد الصوتي الشامل</title>
+    
+    <style>
+      /* Critical CSS for initial load */
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+          'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+          sans-serif, 'Arabic UI Text', 'Geeza Pro';
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      /* Loading screen for better UX */
+      #root:empty::before {
+        content: "Chargement... جاري التحميل";
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-size: 2rem;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>
+      <div style="padding: 2rem; text-align: center; font-size: 1.5rem;">
+        <p>Cette application nécessite JavaScript pour fonctionner.</p>
+        <p>يتطلب هذا التطبيق JavaScript للعمل.</p>
+        <p>This application requires JavaScript to work.</p>
+      </div>
+    </noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/app/main.tsx"></script>
+  </body>
+</html>
