@@ -1,3 +1,4 @@
+// src/app/hooks/useVoiceRecognition.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 // Définir l'interface pour SpeechRecognitionResult
@@ -50,22 +51,16 @@ declare global {
   }
 }
 
-// Définir les types pour les timeouts
-type Timeout = ReturnType<typeof setTimeout>;
-
 export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
-  const [interimTranscript, setInterimTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'prompt' | 'checking'>('checking');
   const [isProcessing, setIsProcessing] = useState(false);
   
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const lastTranscriptRef = useRef('');
-  const silenceTimeoutRef = useRef<Timeout | null>(null);
-  const restartTimeoutRef = useRef<Timeout | null>(null);
-  const isUserSpeakingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   // Check microphone permissions
   useEffect(() => {
@@ -88,6 +83,13 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
     };
 
     checkPermissions();
+
+    // Set mounted ref
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   // Initialize and manage speech recognition
@@ -103,61 +105,57 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
 
     const recognition = new SpeechRecognition();
     
-    // IMPORTANT: Configuration pour éviter les répétitions
-    recognition.continuous = false; // Pas en mode continu - s'arrête après chaque phrase
-    recognition.interimResults = false; // Pas de résultats intermédiaires pour simplifier
-    recognition.maxAlternatives = 1; // Une seule alternative
+    // Configuration simplifiée
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
     recognition.lang = language === 'fr' ? 'fr-FR' : language === 'ar' ? 'ar-TN' : 'en-US';
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Ne pas traiter si déjà en traitement
-      if (isProcessing) return;
-      
-      setIsProcessing(true);
-      
-      if (event.results.length > 0 && event.results[0].length > 0) {
-        const result = event.results[0][0];
-        const finalTranscript = result.transcript.trim().toLowerCase();
-        
-        console.log('Speech recognition result:', finalTranscript);
-        
-        // Vérifier si c'est un nouveau texte (pas un doublon récent)
-        if (finalTranscript && finalTranscript !== lastTranscriptRef.current) {
-          lastTranscriptRef.current = finalTranscript;
-          setTranscript(finalTranscript);
-          
-          // Arrêter l'écoute immédiatement après avoir reçu une commande
-          try {
-            recognition.stop();
-          } catch (e) {
-            // Ignorer les erreurs d'arrêt
-          }
-        }
-      }
-      
-      setIsProcessing(false);
-    };
+  if (!isMountedRef.current) return;
 
-    recognition.onspeechstart = () => {
-      isUserSpeakingRef.current = true;
-      console.log('User started speaking');
-    };
+  let finalText = '';
 
-    recognition.onspeechend = () => {
-      isUserSpeakingRef.current = false;
-      console.log('User stopped speaking');
-    };
+  for (let i = event.resultIndex; i < event.results.length; i++) {
+    const result = event.results[i];
+
+    if (result.isFinal) {
+      finalText += result[0].transcript + ' ';
+    }
+  }
+
+  finalText = finalText.trim().toLowerCase();
+
+  if (!finalText) return;
+
+  console.log('Speech recognition result FINAL:', finalText);
+
+  // 🟢 On attend la FIN RÉELLE de la phrase
+  if (finalText !== lastTranscriptRef.current) {
+    lastTranscriptRef.current = finalText;
+
+    // → On met d’abord le texte
+    setTranscript(finalText);
+
+    // → On arrête APRÈS un micro délai pour laisser finir la capture
+    setTimeout(() => {
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+    }, 300);
+  }
+};
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.log('Speech recognition error:', event.error);
+      if (!isMountedRef.current) return;
+      
       setIsListening(false);
       setIsProcessing(false);
-      isUserSpeakingRef.current = false;
       
       // Gérer les erreurs spécifiques
       switch (event.error) {
         case 'no-speech':
-          // Pas d'erreur pour silence, redémarrer normalement
           setError(null);
           break;
           
@@ -182,43 +180,22 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
 
     recognition.onend = () => {
       console.log('Speech recognition ended');
+      if (!isMountedRef.current) return;
+      
       setIsListening(false);
       setIsProcessing(false);
-      isUserSpeakingRef.current = false;
       
-      // Nettoyer les timeouts
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
-      }
-      
-      if (restartTimeoutRef.current) {
-        clearTimeout(restartTimeoutRef.current);
-        restartTimeoutRef.current = null;
-      }
-      
-      // Redémarrer après un délai, mais seulement si permission accordée
-      if (permissionStatus === 'granted' && !isProcessing) {
-        restartTimeoutRef.current = setTimeout(() => {
-          console.log('Auto-restarting recognition');
-          try {
-            if (recognitionRef.current) {
-              recognitionRef.current.start();
-            }
-          } catch (e) {
-            console.log('Error auto-restarting:', e);
-          }
-        }, 1000); // Délai plus long pour éviter les boucles
-      }
+      // Ne pas redémarrer automatiquement - laissé à App.tsx
     };
 
     recognition.onstart = () => {
       console.log('Speech recognition started');
+      if (!isMountedRef.current) return;
+      
       setIsListening(true);
       setError(null);
-      lastTranscriptRef.current = ''; // Réinitialiser à chaque démarrage
+      lastTranscriptRef.current = '';
       setTranscript('');
-      setInterimTranscript('');
     };
 
     recognitionRef.current = recognition;
@@ -235,57 +212,52 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
         }
         recognitionRef.current = null;
       }
-      
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
-      }
-      
-      if (restartTimeoutRef.current) {
-        clearTimeout(restartTimeoutRef.current);
-        restartTimeoutRef.current = null;
-      }
     };
-  }, [language, permissionStatus, isProcessing]);
+  }, [language, isProcessing]);
 
   // Fonction pour démarrer l'écoute de manière sécurisée
   const startListening = useCallback(() => {
-    console.log('startListening called, permission:', permissionStatus, 'isListening:', isListening, 'isProcessing:', isProcessing);
-    
-    if (permissionStatus === 'denied') {
-      console.log('Microphone permission denied');
-      setError('not-allowed');
+  console.log('startListening called', { permissionStatus, isListening, isProcessing });
+
+  if (permissionStatus === 'denied') {
+    setError('not-allowed');
+    return;
+  }
+
+  // 🛑 PROTECTION PRINCIPALE
+  if (!recognitionRef.current) return;
+  if (isListening || isProcessing) {
+    console.log('Already listening → skip start()');
+    return;
+  }
+
+  try {
+    // Reset propre
+    setTranscript('');
+    setError(null);
+    lastTranscriptRef.current = '';
+
+    recognitionRef.current.start();   // ← un seul appel possible
+    console.log('Recognition started');
+
+  } catch (error: any) {
+    // 🟢 On ignore PROPREMENT l’erreur qui te bloque
+    if (error.name === 'InvalidStateError') {
+      console.log('Recognition already started (ignored)');
       return;
     }
 
-    if (recognitionRef.current && !isListening && !isProcessing) {
-      try {
-        // Nettoyer les états précédents
-        setTranscript('');
-        setInterimTranscript('');
-        setError(null);
-        lastTranscriptRef.current = '';
-        
-        // Démarrer la reconnaissance
-        recognitionRef.current.start();
-        console.log('Recognition started successfully');
-        
-      } catch (error: any) {
-        console.error('Error starting recognition:', error);
-        
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          setPermissionStatus('denied');
-          setError('not-allowed');
-        } else if (error.name === 'InvalidStateError') {
-          console.log('Recognition already started or not ready');
-        } else {
-          setError('failed-to-start');
-        }
-      }
+    console.error('Start error:', error);
+
+    if (error.name === 'NotAllowedError') {
+      setPermissionStatus('denied');
+      setError('not-allowed');
     } else {
-      console.log('Cannot start: isListening=', isListening, 'isProcessing=', isProcessing);
+      setError('failed-to-start');
     }
-  }, [isListening, permissionStatus, isProcessing]);
+  }
+}, [isListening, isProcessing, permissionStatus]);
+
 
   // Fonction pour arrêter l'écoute
   const stopListening = useCallback(() => {
@@ -303,7 +275,6 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
   // Réinitialiser la transcription
   const resetTranscript = useCallback(() => {
     setTranscript('');
-    setInterimTranscript('');
     lastTranscriptRef.current = '';
   }, []);
 
@@ -318,19 +289,15 @@ export function useVoiceRecognition(language: 'fr' | 'ar' | 'en' = 'fr') {
     stopListening();
     
     // Attendre un peu avant de redémarrer
-    const restartTimeout = setTimeout(() => {
+    setTimeout(() => {
       startListening();
     }, 500);
-    
-    // Stocker le timeout pour nettoyage
-    restartTimeoutRef.current = restartTimeout;
   }, [stopListening, startListening]);
 
   return {
     isListening,
     transcript,
     finalTranscript: transcript,
-    interimTranscript,
     error,
     permissionStatus,
     isProcessing,

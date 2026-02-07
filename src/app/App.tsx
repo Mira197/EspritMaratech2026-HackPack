@@ -1,3 +1,4 @@
+//src/app/App.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Mic, MicOff, RefreshCw, Settings, HelpCircle } from 'lucide-react';
 import { BankingAssistant } from './components/BankingAssistant';
@@ -39,6 +40,7 @@ const translations = {
     errorDidntUnderstand: 'Je n\'ai pas compris. Voulez-vous répéter ou obtenir de l\'aide ?',
     helpHome: 'Vous êtes sur l\'écran d\'accueil. Vous pouvez dire "banque" pour les services bancaires, "courses" pour la liste de courses, "aide" pour l\'aide, ou "répéter" pour réentendre le message.',
     onboarding: 'Bienvenue dans votre assistant vocal accessible. Utilisez des commandes vocales simples pour naviguer. Dites "aide" à tout moment pour obtenir de l\'aide.',
+    noSpeechDetected: 'Aucune parole détectée. Je redémarre l\'écoute...',
   },
   ar: {
     appTitle: 'المساعد الصوتي الشامل',
@@ -65,6 +67,7 @@ const translations = {
     errorDidntUnderstand: 'لم أفهم. هل تريد تكرار أو الحصول على المساعدة؟',
     helpHome: 'أنت في الشاشة الرئيسية. يمكنك قول "بنك" للخدمات المصرفية، "تسوق" لقائمة التسوق، "مساعدة" للمساعدة، أو "كرر" لإعادة سماع الرسالة.',
     onboarding: 'مرحبًا بك في مساعدك الصوتي الشامل. استخدم أوامر صوتية بسيطة للتنقل. قل "مساعدة" في أي وقت للحصول على المساعدة.',
+    noSpeechDetected: 'لم يتم اكتشاف أي كلام. أعيد بدء الاستماع...',
   },
   en: {
     appTitle: 'Accessible Voice Assistant',
@@ -91,6 +94,7 @@ const translations = {
     errorDidntUnderstand: 'I didn\'t understand. Would you like to repeat or get help?',
     helpHome: 'You are on the home screen. You can say "bank" for banking services, "shopping" for shopping list, "help" for assistance, or "repeat" to hear the message again.',
     onboarding: 'Welcome to your accessible voice assistant. Use simple voice commands to navigate. Say "help" at any time for assistance.',
+    noSpeechDetected: 'No speech detected. Restarting listening...',
   },
 };
 
@@ -103,10 +107,9 @@ export default function App() {
   const [lastAction, setLastAction] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [isFirstVisit, setIsFirstVisit] = useState(true);
   const [errorCount, setErrorCount] = useState(0);
-  const [shouldListen, setShouldListen] = useState(true);
-  const [isProcessingCommand, setIsProcessingCommand] = useState(false);
+  const [isVoiceCooldown, setIsVoiceCooldown] = useState(false);
+  const [isManualMode, setIsManualMode] = useState(false);
   
   const { 
     isListening, 
@@ -118,7 +121,6 @@ export default function App() {
     permissionStatus, 
     clearError,
     isProcessing: isVoiceProcessing,
-    restartListening
   } = useVoiceRecognition(language);
   
   const { speak, isSpeaking, repeatLastMessage, stopSpeaking } = useTextToSpeech(language, slowMode);
@@ -128,261 +130,383 @@ export default function App() {
 
   // Références pour gérer les timeouts
   const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const processTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commandHandledRef = useRef(false);
+  const isInitializedRef = useRef(false);
+  const voiceCooldownRef = useRef(false);
+  const errorResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noSpeechTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTranscriptRef = useRef('');
+  const isSpeakingRef = useRef(false);
 
   // Voice status derived from states
   const voiceStatus = isSpeaking ? 'speaking' : isListening ? 'listening' : 'idle';
 
+  // Synchroniser les refs avec les états
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
+
   // Nettoyer les timeouts
-  const clearTimeouts = () => {
-    if (restartTimeoutRef.current) {
-      clearTimeout(restartTimeoutRef.current);
-      restartTimeoutRef.current = null;
-    }
-    if (processTimeoutRef.current) {
-      clearTimeout(processTimeoutRef.current);
-      processTimeoutRef.current = null;
-    }
+  const clearAllTimeouts = () => {
+    const timeouts = [
+      restartTimeoutRef,
+      errorResetTimeoutRef,
+      noSpeechTimeoutRef,
+    ];
+    
+    timeouts.forEach(timeoutRef => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    });
   };
 
   // Nettoyage à la fin
   useEffect(() => {
     return () => {
-      clearTimeouts();
+      clearAllTimeouts();
       stopSpeaking();
+      stopListening();
     };
-  }, [stopSpeaking]);
+  }, [stopSpeaking, stopListening]);
 
-  // Announce welcome message on first load with onboarding
+  // Message de bienvenue initial
   useEffect(() => {
-    clearTimeouts();
+    if (isInitializedRef.current) return;
+    
+    clearAllTimeouts();
+    
+    // Arrêter toute parole ou écoute en cours
+    stopSpeaking();
+    stopListening();
     
     const hasVisited = localStorage.getItem('hasVisited');
-    setShouldListen(false); // Arrêter d'écouter pendant le message initial
+    const delay = 2000; // Délai initial augmenté
     
-    if (!hasVisited) {
-      const timer = setTimeout(() => {
-        speak(t.onboarding + ' ' + t.welcome);
-        setLastMessage(t.onboarding);
-        setLastAction('App started - First visit');
+    const timer = setTimeout(() => {
+      const message = hasVisited ? t.welcome : t.onboarding + ' ' + t.welcome;
+      speak(message);
+      setLastMessage(message);
+      setLastAction('App started');
+      
+      if (!hasVisited) {
         localStorage.setItem('hasVisited', 'true');
-        
-        // Redémarrer l'écoute après le message
-        restartTimeoutRef.current = setTimeout(() => {
-          setShouldListen(true);
-        }, 4000); // Plus long pour le premier message
-      }, 1500);
+      }
       
-      return () => clearTimeout(timer);
-    } else {
-      const timer = setTimeout(() => {
-        speak(t.welcome);
-        setLastMessage(t.welcome);
-        setLastAction('App started');
-        
-        // Redémarrer l'écoute après le message
-        restartTimeoutRef.current = setTimeout(() => {
-          setShouldListen(true);
-        }, 2500);
-      }, 1000);
-      
-      return () => clearTimeout(timer);
-    }
+      // Redémarrer l'écoute après le message
+      restartTimeoutRef.current = setTimeout(() => {
+        if (permissionStatus === 'granted' && !isSpeakingRef.current) {
+          startListening();
+        }
+        isInitializedRef.current = true;
+      }, 5000); // Délai long pour le message initial
+    }, delay);
+    
+    return () => clearTimeout(timer);
   }, []);
 
-  // Gérer l'écoute automatique quand shouldListen change
+  // Gérer les transitions entre parole et écoute
   useEffect(() => {
-    if (shouldListen && !isListening && !isSpeaking && !isProcessingCommand && permissionStatus === 'granted') {
-      console.log('Auto-starting listening');
-      restartTimeoutRef.current = setTimeout(() => {
-        startListening();
-      }, 800);
+    clearAllTimeouts();
+    
+    console.log('Voice State Update:', {
+      isSpeaking,
+      isListening,
+      isVoiceProcessing,
+      isVoiceCooldown,
+      error,
+      transcript,
+    });
+    
+    // Quand on commence à parler, arrêter d'écouter
+    if (isSpeaking && isListening) {
+      console.log('Stopping listening to speak');
+      stopListening();
+    }
+    
+    // Quand on arrête de parler, redémarrer l'écoute après un délai
+    if (!isSpeaking && permissionStatus === 'granted' && !isVoiceCooldown) {
+      if (!isListening && !isVoiceProcessing && !isManualMode) {
+        // Délai intelligent basé sur le dernier message
+        let delay = 2500;
+        if (lastMessage.includes('dinars') || lastMessage.includes('balance') || lastMessage.includes('رصيد')) {
+          delay = 4000;
+        } else if (lastMessage.length > 100) {
+          delay = 3500;
+        }
+        
+        restartTimeoutRef.current = setTimeout(() => {
+          console.log('Auto-restarting listening after speaking, delay:', delay);
+          startListening();
+        }, delay);
+      }
     }
     
     return () => {
-      if (restartTimeoutRef.current) {
-        clearTimeout(restartTimeoutRef.current);
+      clearAllTimeouts();
+    };
+  }, [isSpeaking, isListening, isVoiceProcessing, permissionStatus, isVoiceCooldown, lastMessage, isManualMode]);
+
+  // Gérer les erreurs de reconnaissance vocale
+  useEffect(() => {
+    if (error === 'no-speech' && !isManualMode) {
+      console.log('No speech detected, waiting before restart...');
+      clearAllTimeouts();
+      
+      // Attendre un peu plus longtemps pour les erreurs no-speech
+      noSpeechTimeoutRef.current = setTimeout(() => {
+        if (permissionStatus === 'granted' && !isSpeakingRef.current && !isVoiceCooldown && !isListening) {
+          console.log('Restarting after no-speech error');
+          
+          // Donner un feedback à l'utilisateur
+          if (errorCount === 0) {
+            setTimeout(() => {
+              speak(t.noSpeechDetected);
+            }, 500);
+          }
+          
+          startListening();
+        }
+      }, 3000);
+    }
+    
+    // Réinitialiser le compteur d'erreurs après un certain temps
+    if (error && error !== 'no-speech') {
+      errorResetTimeoutRef.current = setTimeout(() => {
+        setErrorCount(0);
+        clearError();
+      }, 3000);
+    }
+  }, [error, permissionStatus, isVoiceCooldown, isListening, errorCount, t, clearError]);
+
+  // Reset automatique du compteur d'erreurs
+  useEffect(() => {
+    if (errorCount > 0) {
+      if (errorResetTimeoutRef.current) {
+        clearTimeout(errorResetTimeoutRef.current);
+      }
+      
+      errorResetTimeoutRef.current = setTimeout(() => {
+        setErrorCount(0);
+      }, 8000);
+    }
+    
+    return () => {
+      if (errorResetTimeoutRef.current) {
+        clearTimeout(errorResetTimeoutRef.current);
       }
     };
-  }, [shouldListen, isListening, isSpeaking, isProcessingCommand, permissionStatus, startListening]);
+  }, [errorCount]);
 
-  // Voice command processing avec protection contre les conflits
+  // Reset du flag commandHandled après un certain temps
   useEffect(() => {
-    if (transcript && !isProcessingCommand && shouldListen) {
-      const lowerTranscript = transcript.trim().toLowerCase();
-      let commandRecognized = false;
-      
-      console.log('Processing transcript:', lowerTranscript);
-      
-      // Arrêter d'écouter pendant le traitement
-      setIsProcessingCommand(true);
-      setShouldListen(false);
-      
-      if (isListening) {
-        stopListening();
+    const timer = setTimeout(() => {
+      commandHandledRef.current = false;
+    }, 1500);
+    
+    return () => clearTimeout(timer);
+  }, [transcript]);
+
+  // Traitement des commandes vocales
+  useEffect(() => {
+    if (!transcript.trim() || isSpeaking || isVoiceCooldown) return;
+    
+    const lowerTranscript = transcript.trim().toLowerCase();
+    
+    // Éviter les doublons
+    if (lowerTranscript === lastTranscriptRef.current) {
+      console.log('Duplicate transcript, ignoring:', lowerTranscript);
+      resetTranscript();
+      return;
+    }
+    
+    lastTranscriptRef.current = lowerTranscript;
+    console.log('Processing transcript:', lowerTranscript);
+    
+    // Mettre en cooldown pour éviter les traitements multiples
+    setIsVoiceCooldown(true);
+    voiceCooldownRef.current = true;
+    setIsManualMode(false);
+    
+    // Arrêter l'écoute pendant le traitement
+    if (isListening) {
+      stopListening();
+    }
+    
+    let commandProcessed = false;
+    let responseDelay = 800; // Délai augmenté pour la stabilité
+    
+    // Commandes de langue
+    if (lowerTranscript.includes('passer en français') || lowerTranscript.includes('français')) {
+      setLanguage('fr');
+      commandProcessed = true;
+      const msg = translations.fr.languageSwitched;
+      setTimeout(() => {
+        speak(msg);
+        setLastMessage(msg);
+      }, responseDelay);
+    } 
+    else if (lowerTranscript.includes('switch to english') || lowerTranscript.includes('english')) {
+      setLanguage('en');
+      commandProcessed = true;
+      const msg = translations.en.languageSwitched;
+      setTimeout(() => {
+        speak(msg);
+        setLastMessage(msg);
+      }, responseDelay);
+    }
+    else if (lowerTranscript.includes('حول إلى العربية') || lowerTranscript.includes('عربي')) {
+      setLanguage('ar');
+      commandProcessed = true;
+      const msg = translations.ar.languageSwitched;
+      setTimeout(() => {
+        speak(msg);
+        setLastMessage(msg);
+      }, responseDelay);
+    }
+    
+    // Navigation
+    else if (lowerTranscript.includes('banque') || lowerTranscript.includes('bank') || lowerTranscript.includes('بنك')) {
+      setCurrentScreen('banking');
+      commandProcessed = true;
+      const msg = language === 'fr' ? 'Module bancaire ouvert' : 
+                  language === 'ar' ? 'تم فتح الخدمات المصرفية' : 
+                  'Banking module opened';
+      setTimeout(() => {
+        speak(msg);
+        setLastMessage(msg);
+      }, responseDelay);
+    }
+    else if (lowerTranscript.includes('course') || lowerTranscript.includes('shopping') || lowerTranscript.includes('تسوق')) {
+      setCurrentScreen('shopping');
+      commandProcessed = true;
+      const msg = language === 'fr' ? 'Liste de courses ouverte' : 
+                  language === 'ar' ? 'تم فتح قائمة التسوق' : 
+                  'Shopping list opened';
+      setTimeout(() => {
+        speak(msg);
+        setLastMessage(msg);
+      }, responseDelay);
+    }
+    else if (lowerTranscript.includes('accueil') || lowerTranscript.includes('home') || lowerTranscript.includes('رئيسية')) {
+      setCurrentScreen('home');
+      commandProcessed = true;
+      setTimeout(() => {
+        speak(t.welcome);
+        setLastMessage(t.welcome);
+      }, responseDelay);
+    }
+    
+    // Commandes utilitaires
+    else if (lowerTranscript.includes('répéter') || lowerTranscript.includes('repeat') || lowerTranscript.includes('كرر')) {
+      commandProcessed = true;
+      setTimeout(() => {
+        repeatLastMessage();
+      }, responseDelay);
+    }
+    else if (lowerTranscript.includes('aide') || lowerTranscript.includes('help') || lowerTranscript.includes('مساعدة')) {
+      commandProcessed = true;
+      const helpMessage = t.helpHome;
+      setTimeout(() => {
+        speak(helpMessage);
+        setLastMessage(helpMessage);
+        setShowHelp(true);
+      }, responseDelay);
+    }
+    else if (lowerTranscript.includes('écouter') || lowerTranscript.includes('listen') || lowerTranscript.includes('استمع')) {
+      commandProcessed = true;
+      const msg = language === 'fr' ? 'Je vous écoute' :
+                  language === 'ar' ? 'أنا أستمع' :
+                  'I am listening';
+      setTimeout(() => {
+        speak(msg);
+        setLastMessage(msg);
+      }, responseDelay);
+    }
+    else if (lowerTranscript.includes('paramètre') || lowerTranscript.includes('settings') || lowerTranscript.includes('إعدادات')) {
+      commandProcessed = true;
+      setShowSettings(!showSettings);
+    }
+    else if (lowerTranscript.includes('manuel') || lowerTranscript.includes('manual') || lowerTranscript.includes('يدوي')) {
+      commandProcessed = true;
+      setIsManualMode(true);
+      const msg = language === 'fr' ? 'Mode manuel activé. Appuyez sur le micro pour écouter.' :
+                  language === 'ar' ? 'تم تفعيل الوضع اليدوي. اضغط على الميكروفون للاستماع.' :
+                  'Manual mode activated. Press the microphone to listen.';
+      setTimeout(() => {
+        speak(msg);
+        setLastMessage(msg);
+      }, responseDelay);
+    }
+    else if (lowerTranscript.includes('auto') || lowerTranscript.includes('automatique') || lowerTranscript.includes('تلقائي')) {
+      commandProcessed = true;
+      setIsManualMode(false);
+      const msg = language === 'fr' ? 'Mode automatique activé. Je vais redémarrer l\'écoute automatiquement.' :
+                  language === 'ar' ? 'تم تفعيل الوضع التلقائي. سأعيد بدء الاستماع تلقائياً.' :
+                  'Automatic mode activated. I will restart listening automatically.';
+      setTimeout(() => {
+        speak(msg);
+        setLastMessage(msg);
+        // Redémarrer l'écoute après le message
+        setTimeout(() => {
+          if (permissionStatus === 'granted') {
+            startListening();
+          }
+        }, 2000);
+      }, responseDelay);
+    }
+    
+    // Si commande non reconnue
+    else if (lowerTranscript.length > 2) {
+      // SI LE MODULE A DÉJÀ RÉPONDU → ON IGNORE
+      if (commandHandledRef.current) {
+        console.log('Command already handled, ignoring...');
+        commandHandledRef.current = false;
+        setErrorCount(0);
+        resetTranscript();
+        return;
       }
-      
-      // Language switching commands
-      if (lowerTranscript.includes('passer en français') || lowerTranscript.includes('français')) {
-        setLanguage('fr');
+
+      const newErrorCount = errorCount + 1;
+      setErrorCount(newErrorCount);
+
+      if (newErrorCount >= 2) {
         setTimeout(() => {
-          speak(translations.fr.languageSwitched);
-          setLastMessage(translations.fr.languageSwitched);
-          setLastAction('Language switched to French');
-        }, 500);
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
-      } else if (lowerTranscript.includes('حول إلى العربية') || lowerTranscript.includes('عربي')) {
-        setLanguage('ar');
-        setTimeout(() => {
-          speak(translations.ar.languageSwitched);
-          setLastMessage(translations.ar.languageSwitched);
-          setLastAction('Language switched to Arabic');
-        }, 500);
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
-      } else if (lowerTranscript.includes('switch to english') || lowerTranscript.includes('english')) {
-        setLanguage('en');
-        setTimeout(() => {
-          speak(translations.en.languageSwitched);
-          setLastMessage(translations.en.languageSwitched);
-          setLastAction('Language switched to English');
-        }, 500);
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
+          speak(t.errorDidntUnderstand);
+          setLastMessage(t.errorDidntUnderstand);
+        }, responseDelay);
+      } else {
+        // Pour la première erreur, juste redémarrer l'écoute
+        commandProcessed = true;
       }
-      
-      // Navigation commands
-      else if (lowerTranscript.includes('banque') || lowerTranscript.includes('bank') || lowerTranscript.includes('بنك')) {
-        setCurrentScreen('banking');
-        const msg = language === 'fr' ? 'Module bancaire ouvert' : 
-                    language === 'ar' ? 'تم فتح الخدمات المصرفية' : 
-                    'Banking module opened';
-        
-        setTimeout(() => {
-          speak(msg);
-          setLastMessage(msg);
-          setLastAction('Navigated to Banking');
-        }, 800);
-        
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
-      } else if (lowerTranscript.includes('course') || lowerTranscript.includes('shopping') || lowerTranscript.includes('تسوق')) {
-        setCurrentScreen('shopping');
-        const msg = language === 'fr' ? 'Liste de courses ouverte' : 
-                    language === 'ar' ? 'تم فتح قائمة التسوق' : 
-                    'Shopping list opened';
-        
-        setTimeout(() => {
-          speak(msg);
-          setLastMessage(msg);
-          setLastAction('Navigated to Shopping');
-        }, 800);
-        
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
-      } else if (lowerTranscript.includes('accueil') || lowerTranscript.includes('home') || lowerTranscript.includes('رئيسية')) {
-        setCurrentScreen('home');
-        
-        setTimeout(() => {
-          speak(t.welcome);
-          setLastMessage(t.welcome);
-          setLastAction('Navigated to Home');
-        }, 800);
-        
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
-      } else if (lowerTranscript.includes('répéter') || lowerTranscript.includes('repeat') || lowerTranscript.includes('كرر')) {
-        setTimeout(() => {
-          repeatLastMessage();
-          setLastAction('Repeated last message');
-        }, 800);
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
-      } else if (lowerTranscript.includes('aide') || lowerTranscript.includes('help') || lowerTranscript.includes('مساعدة')) {
-        let helpMessage = t.helpHome;
-        
-        setTimeout(() => {
-          speak(helpMessage);
-          setLastMessage(helpMessage);
-          setLastAction('Help requested');
-          setShowHelp(true);
-        }, 800);
-        
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
-      } else if (lowerTranscript.includes('paramètre') || lowerTranscript.includes('settings') || lowerTranscript.includes('إعدادات')) {
-        setShowSettings(!showSettings);
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
-      } else if (lowerTranscript.includes('écouter') || lowerTranscript.includes('listen') || lowerTranscript.includes('استمع')) {
-        // Commande pour démarrer manuellement l'écoute
-        setTimeout(() => {
-          const msg = language === 'fr' ? 'Je vous écoute' :
-                      language === 'ar' ? 'أنا أستمع' :
-                      'I am listening';
-          speak(msg);
-          setLastMessage(msg);
-          setLastAction('Manual listening started');
+    }
+    
+    // Réinitialiser la transcription
+    resetTranscript();
+    
+    // Redémarrer l'écoute si une commande a été traitée
+    const restartDelay = commandProcessed ? 3000 : 2000;
+    
+    clearAllTimeouts();
+    
+    // Libérer le cooldown après un délai
+    setTimeout(() => {
+      setIsVoiceCooldown(false);
+      voiceCooldownRef.current = false;
+      commandHandledRef.current = false;
+    }, 2500);
+    
+    if (!isManualMode) {
+      restartTimeoutRef.current = setTimeout(() => {
+        if (!isSpeakingRef.current && permissionStatus === 'granted' && !voiceCooldownRef.current) {
+          console.log('Restarting listening after command processing');
           startListening();
-        }, 500);
-        resetTranscript();
-        commandRecognized = true;
-        setErrorCount(0);
-      }
-
-      // Si commande non reconnue
-      if (!commandRecognized && lowerTranscript.length > 2) {
-        setErrorCount(prev => prev + 1);
-        if (errorCount >= 1) {
-          setTimeout(() => {
-            speak(t.errorDidntUnderstand);
-            setLastMessage(t.errorDidntUnderstand);
-            setLastAction('Error - Command not understood');
-          }, 800);
-        }
-      }
-
-      // Redémarrer l'écoute après un délai
-      const restartDelay = commandRecognized ? 3000 : 1500;
-      processTimeoutRef.current = setTimeout(() => {
-        setIsProcessingCommand(false);
-        if (!isSpeaking) {
-          setShouldListen(true);
         }
       }, restartDelay);
     }
-  }, [transcript, language, currentScreen, isProcessingCommand, shouldListen, isListening, isSpeaking]);
-
-  // Arrêter d'écouter quand le système parle
-  useEffect(() => {
-    if (isSpeaking && isListening) {
-      stopListening();
-      setShouldListen(false);
-    }
     
-    // Redémarrer l'écoute quand le système arrête de parler
-    if (!isSpeaking && shouldListen && !isProcessingCommand) {
-      restartTimeoutRef.current = setTimeout(() => {
-        setShouldListen(true);
-      }, 1000);
-    }
-    
-    return () => {
-      if (restartTimeoutRef.current) {
-        clearTimeout(restartTimeoutRef.current);
-      }
-    };
-  }, [isSpeaking, isListening, shouldListen, isProcessingCommand, stopListening]);
+  }, [transcript, language, isSpeaking, isListening, t, errorCount, isVoiceCooldown, permissionStatus, resetTranscript]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -394,13 +518,18 @@ export default function App() {
           
           if (isListening) {
             stopListening();
-            setShouldListen(false);
           } else {
             if (permissionStatus !== 'denied') {
-              setShouldListen(true);
+              // Si on parle, arrêter d'abord
+              if (isSpeaking) {
+                stopSpeaking();
+              }
+              
+              clearAllTimeouts();
+              
               setTimeout(() => {
                 startListening();
-              }, 300);
+              }, 1000);
             }
           }
         }
@@ -417,39 +546,90 @@ export default function App() {
       if (e.key === 'r' || e.key === 'R') {
         repeatLastMessage();
       }
+      // M to toggle manual mode
+      if (e.key === 'm' || e.key === 'M') {
+        setIsManualMode(!isManualMode);
+        const msg = isManualMode 
+          ? (language === 'fr' ? 'Mode automatique activé' : 
+             language === 'ar' ? 'تم تفعيل الوضع التلقائي' : 
+             'Automatic mode activated')
+          : (language === 'fr' ? 'Mode manuel activé' : 
+             language === 'ar' ? 'تم تفعيل الوضع اليدوي' : 
+             'Manual mode activated');
+        speak(msg);
+        setLastMessage(msg);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isListening, permissionStatus, t, startListening, stopListening, speak, repeatLastMessage]);
+  }, [isListening, permissionStatus, t, startListening, stopListening, speak, repeatLastMessage, isSpeaking, stopSpeaking, isManualMode, language]);
 
   const handleVoiceResponse = (message: string) => {
-    // Arrêter d'écouter avant de parler
+    if (!message.trim()) return;
+    
+    commandHandledRef.current = true;
+    
+    clearAllTimeouts();
+    
     if (isListening) {
+      console.log('Stopping listening before voice response');
       stopListening();
-      setShouldListen(false);
     }
     
+    setIsVoiceCooldown(true);
+    voiceCooldownRef.current = true;
+    setIsManualMode(false);
+
+    // Attendre un peu avant de parler
     setTimeout(() => {
       speak(message);
       setLastMessage(message);
       
-      // Redémarrer l'écoute après avoir parlé
-      restartTimeoutRef.current = setTimeout(() => {
-        setShouldListen(true);
-      }, 2000);
-    }, 500);
+      // Libérer le cooldown après la parole
+      setTimeout(() => {
+        setIsVoiceCooldown(false);
+        voiceCooldownRef.current = false;
+        commandHandledRef.current = false;
+        
+        // Redémarrer l'écoute APRÈS que la parole soit complètement terminée
+        if (permissionStatus === 'granted' && !isSpeakingRef.current && !isManualMode) {
+          restartTimeoutRef.current = setTimeout(() => {
+            console.log('Restarting listening after module voice response');
+            startListening();
+          }, 3000);
+        }
+      }, 3500);
+    }, 1000);
   };
 
   const handleManualListen = () => {
     if (isListening) {
+      console.log('Manually stopping listening');
       stopListening();
-      setShouldListen(false);
+      // Reset complet
+      setIsVoiceCooldown(false);
+      voiceCooldownRef.current = false;
+      commandHandledRef.current = false;
+      setIsManualMode(true);
+      clearAllTimeouts();
     } else {
-      setShouldListen(true);
-      setTimeout(() => {
-        startListening();
-      }, 300);
+      console.log('Manually starting listening');
+      setIsManualMode(true);
+      
+      // Si on parle, arrêter de parler d'abord
+      if (isSpeaking) {
+        stopSpeaking();
+      }
+      
+      clearAllTimeouts();
+      
+      // Attendre un peu avant de démarrer l'écoute
+      restartTimeoutRef.current = setTimeout(() => {
+        if (permissionStatus !== 'denied' && !isVoiceCooldown) {
+          startListening();
+        }
+      }, 1500);
     }
   };
 
@@ -478,6 +658,15 @@ export default function App() {
           <h1 className="text-4xl text-center" tabIndex={0}>
             {t.appTitle}
           </h1>
+          {isManualMode && (
+            <div className="mt-4 text-center">
+              <span className={`inline-block px-4 py-2 rounded-lg ${highContrast ? 'bg-yellow-900 text-white' : 'bg-yellow-100 text-yellow-800'}`}>
+                {language === 'fr' ? '🔧 Mode manuel' : 
+                 language === 'ar' ? '🔧 الوضع اليدوي' : 
+                 '🔧 Manual Mode'}
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -499,6 +688,11 @@ export default function App() {
               <Mic className="w-8 h-8 animate-pulse text-red-600" aria-hidden="true" />
               <span className="text-2xl">{t.listening}</span>
             </>
+          ) : isVoiceProcessing ? (
+            <>
+              <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+              <span className="text-2xl">{t.processing}</span>
+            </>
           ) : (
             <>
               <MicOff className="w-8 h-8" aria-hidden="true" />
@@ -506,9 +700,15 @@ export default function App() {
             </>
           )}
           
-          {isProcessingCommand && (
+          {isVoiceCooldown && (
             <span className="text-xl text-yellow-600">
-              {t.processing}
+              {language === 'fr' ? 'Pause...' : language === 'ar' ? 'انتظر...' : 'Pausing...'}
+            </span>
+          )}
+          
+          {error === 'no-speech' && (
+            <span className="text-xl text-orange-600">
+              {language === 'fr' ? 'Aucune parole...' : language === 'ar' ? 'لا كلام...' : 'No speech...'}
             </span>
           )}
         </div>
@@ -541,6 +741,11 @@ export default function App() {
               >
                 {lastMessage || t.welcome}
               </p>
+              {lastAction && (
+                <p className="text-xl mt-4 opacity-70">
+                  <strong>{t.lastAction}:</strong> {lastAction}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -561,13 +766,37 @@ export default function App() {
               onStartListening={handleManualListen}
               onStopListening={() => {
                 stopListening();
-                setShouldListen(false);
               }}
               highContrast={highContrast}
               language={language}
               permissionStatus={permissionStatus}
-              //isProcessing={isProcessingCommand}
+              isProcessing={isVoiceProcessing || isVoiceCooldown}
             />
+
+            {/* Mode Indicator */}
+            <div className="text-center">
+              <p className="text-2xl opacity-70">
+                {isManualMode 
+                  ? (language === 'fr' 
+                    ? '🔧 Mode manuel: Appuyez sur le micro pour écouter' 
+                    : language === 'ar' 
+                    ? '🔧 الوضع اليدوي: اضغط على الميكروفون للاستماع'
+                    : '🔧 Manual Mode: Press mic to listen')
+                  : (language === 'fr'
+                    ? '🤖 Mode automatique: Je redémarre automatiquement après chaque réponse'
+                    : language === 'ar'
+                    ? '🤖 الوضع التلقائي: أعيد بدء الاستماع تلقائياً بعد كل رد'
+                    : '🤖 Automatic Mode: I restart automatically after each response')
+                }
+              </p>
+              <p className="text-xl mt-2 opacity-60">
+                {language === 'fr' 
+                  ? 'Appuyez sur M pour basculer entre manuel/auto'
+                  : language === 'ar'
+                  ? 'اضغط على M للتبديل بين اليدوي والتلقائي'
+                  : 'Press M to toggle manual/auto mode'}
+              </p>
+            </div>
 
             {/* Module Selection */}
             <div 
@@ -724,6 +953,42 @@ export default function App() {
               <span className="text-2xl">{language === 'fr' ? 'FR' : language === 'ar' ? 'AR' : 'EN'}</span>
             </button>
           </div>
+          
+          {/* Mode Toggle Button */}
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => {
+                setIsManualMode(!isManualMode);
+                const msg = isManualMode 
+                  ? (language === 'fr' ? 'Mode automatique activé. Je redémarre automatiquement.' : 
+                     language === 'ar' ? 'تم تفعيل الوضع التلقائي. سأعيد بدء الاستماع تلقائياً.' : 
+                     'Automatic mode activated. I will restart automatically.')
+                  : (language === 'fr' ? 'Mode manuel activé. Appuyez sur le micro pour écouter.' : 
+                     language === 'ar' ? 'تم تفعيل الوضع اليدوي. اضغط على الميكروفون للاستماع.' : 
+                     'Manual mode activated. Press the microphone to listen.');
+                speak(msg);
+                setLastMessage(msg);
+              }}
+              className={`px-8 py-4 rounded-xl flex items-center justify-center gap-3 transition-all hover:scale-105 focus:scale-105 focus:outline-none focus:ring-8 ${
+                highContrast 
+                  ? 'bg-gray-800 border-2 border-white focus:ring-white' 
+                  : isManualMode
+                  ? 'bg-orange-100 hover:bg-orange-200 focus:ring-orange-300'
+                  : 'bg-teal-100 hover:bg-teal-200 focus:ring-teal-300'
+              }`}
+              aria-label={isManualMode ? 'Passer en mode automatique' : 'Passer en mode manuel'}
+            >
+              <span className="text-3xl" aria-hidden="true">
+                {isManualMode ? '🔧' : '🤖'}
+              </span>
+              <span className="text-2xl">
+                {isManualMode 
+                  ? (language === 'fr' ? 'Mode Manuel' : language === 'ar' ? 'الوضع اليدوي' : 'Manual Mode')
+                  : (language === 'fr' ? 'Mode Auto' : language === 'ar' ? 'الوضع التلقائي' : 'Auto Mode')
+                }
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Transcript Display for debugging */}
@@ -751,10 +1016,10 @@ export default function App() {
         <div className="max-w-4xl mx-auto px-6 text-center">
           <p className="text-xl opacity-70">
             {language === 'fr' 
-              ? 'Raccourcis: Espace/Entrée = Micro • Échap = Accueil • R = Répéter' 
+              ? 'Raccourcis: Espace/Entrée = Micro • Échap = Accueil • R = Répéter • M = Mode Manuel/Auto' 
               : language === 'ar'
-              ? 'اختصارات: مسافة/إدخال = ميكروفون • هروب = الرئيسية • R = كرر'
-              : 'Shortcuts: Space/Enter = Mic • Esc = Home • R = Repeat'}
+              ? 'اختصارات: مسافة/إدخال = ميكروفون • هروب = الرئيسية • R = كرر • M = الوضع اليدوي/التلقائي'
+              : 'Shortcuts: Space/Enter = Mic • Esc = Home • R = Repeat • M = Manual/Auto Mode'}
           </p>
         </div>
       </footer>
@@ -797,10 +1062,9 @@ export default function App() {
         highContrast={highContrast}
         onDismiss={clearError}
         onTryAgain={() => {
-          setShouldListen(true);
           setTimeout(() => {
             startListening();
-          }, 500);
+          }, 1000);
         }}
       />
     </div>

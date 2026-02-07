@@ -7,8 +7,12 @@ interface VoiceControlsProps {
   onStopListening: () => void;
   highContrast: boolean;
   language: 'fr' | 'ar' | 'en';
-  permissionStatus?: 'granted' | 'denied' | 'prompt' | 'checking';
+  permissionStatus: 'granted' | 'denied' | 'prompt' | 'checking';
+
+  // ➜ AJOUTE ÇA
+  isProcessing?: boolean;
 }
+
 
 export function VoiceControls({
   isListening,
