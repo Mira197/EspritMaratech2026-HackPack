@@ -5,7 +5,7 @@ from database import db
 
 router = APIRouter()
 
-stripe.api_key = "sk_test_51QwR8RJig9dgGMXA88GSrTkZMyTs3eDJnxmagMJK14JZZSHHfXqi46pWZ3lJS6CU5cRyjDS3EsSFgF3yV4yhHONv004ryM6e41"   # TA CLE
+stripe.api_key = "STRIPE_SECRET_KEY"   # TA CLE
 
 class PaymentIntentDTO(BaseModel):
     user: str
