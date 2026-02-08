@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, ShoppingCart, Trash2, Plus } from 'lucide-react';
 import { getArticles, getTotal } from "../../services/api";
+import StripePay from "./StripePay";
 
 interface ShoppingAssistantProps {
   language: 'fr' | 'ar' | 'en';
@@ -20,7 +21,8 @@ interface ShoppingItem {
   price: number;
 }
 
-type ShoppingState = 'idle' | 'add-item' | 'add-quantity' | 'remove-item';
+type ShoppingState = 'idle' | 'add-item' | 'add-quantity' | 'remove-item'  | 'checkout-offer'
+  | 'checkout-paying';
 
 // Mock price database
 const mockPrices: Record<string, number> = {
@@ -287,6 +289,83 @@ export function ShoppingListAssistant({
     if (!transcript) return;
 
     const lowerTranscript = transcript.toLowerCase();
+    // ================= PAIEMENT PANIER =================
+
+// 🔹 DEMANDE DE PAIEMENT PANIER
+if (
+  state === "idle" &&
+  (
+    lowerTranscript.includes("payer") ||
+    lowerTranscript.includes("checkout") ||
+    lowerTranscript.includes("خلص") ||
+    lowerTranscript.includes("دفع")
+  )
+) {
+
+  let resume = items
+    .map(i => `${i.quantity} ${i.name}`)
+    .join(", ");
+
+  onVoiceResponse(
+    language === "fr"
+      ? `Votre panier contient : ${resume}. Total ${total} dinars. Voulez-vous payer maintenant ?`
+      : language === "ar"
+      ? `سلتك تحتوي على : ${resume}. المجموع ${total} دينار. هل تريد الدفع الآن؟`
+      : `Your cart contains: ${resume}. Total ${total} dinars. Do you want to pay now?`
+  );
+
+  setState("checkout-offer");
+  onResetTranscript();
+  return;
+}
+// 🔹 CONFIRMATION PAIEMENT
+if (state === "checkout-offer") {
+
+  if (
+    lowerTranscript.includes("oui") ||
+    lowerTranscript.includes("yes") ||
+    lowerTranscript.includes("نعم")
+  ) {
+
+    setState("checkout-paying");
+
+    onVoiceResponse(
+      language === "fr"
+        ? "Très bien, je lance le paiement sécurisé Stripe."
+        : language === "ar"
+        ? "حسناً، سأبدأ الدفع عبر سترايب."
+        : "Okay, starting secure Stripe payment."
+    );
+
+    // 👉 DÉCLENCHER STRIPE
+    // @ts-ignore
+    window.triggerStripePay?.();
+
+    onResetTranscript();
+    return;
+  }
+
+  if (
+    lowerTranscript.includes("non") ||
+    lowerTranscript.includes("no") ||
+    lowerTranscript.includes("لا")
+  ) {
+
+    setState("idle");
+
+    onVoiceResponse(
+      language === "fr"
+        ? "D'accord, paiement annulé. Que voulez-vous faire ?"
+        : language === "ar"
+        ? "حسناً، تم إلغاء الدفع. ماذا تريد أن تفعل؟"
+        : "Okay, payment canceled. What would you like to do?"
+    );
+
+    onResetTranscript();
+    return;
+  }
+}
+
 
     // Add item command
     if (
@@ -463,6 +542,52 @@ export function ShoppingListAssistant({
       onResetTranscript();
       return;
     }
+// 🔹 CONFIRMATION PAIEMENT
+if (state === "checkout-offer") {
+
+  if (
+    lowerTranscript.includes("oui") ||
+    lowerTranscript.includes("yes") ||
+    lowerTranscript.includes("نعم")
+  ) {
+    setState("checkout-paying");
+
+    onVoiceResponse(
+      language === "fr"
+        ? "Paiement du panier en cours"
+        : language === "ar"
+        ? "جاري دفع السلة"
+        : "Processing cart payment"
+    );
+
+    // 👉 déclenche Stripe global
+    // @ts-ignore
+    window.triggerStripePay?.();
+
+    onResetTranscript();
+    return;
+  }
+
+  if (
+    lowerTranscript.includes("non") ||
+    lowerTranscript.includes("no") ||
+    lowerTranscript.includes("لا")
+  ) {
+    setState("idle");
+
+    onVoiceResponse(
+      language === "fr"
+        ? "Paiement annulé"
+        : language === "ar"
+        ? "تم إلغاء الدفع"
+        : "Payment canceled"
+    );
+
+    onResetTranscript();
+    return;
+  }
+}
+
 
     // Read total command
     if (state === 'idle' && (lowerTranscript.includes('total') || lowerTranscript.includes('مجموع'))) {
@@ -758,6 +883,35 @@ export function ShoppingListAssistant({
           </ul>
         )}
       </div>
+      {/* 🔥 PAIEMENT PANIER */}
+{state === "checkout-paying" && (
+  <StripePay
+    amount={total}
+    onSuccess={async (newBalance: number) => {
+
+      // 1️⃣ Vider le panier côté back
+      for (const item of items) {
+        await removeArticle(item.name);
+      }
+
+      // 2️⃣ Reset local
+      setItems([]);
+      setTotal(0);
+
+      // 3️⃣ Message vocal
+      onVoiceResponse(
+        language === "fr"
+          ? `Paiement réussi. Nouveau solde : ${newBalance} dinars`
+          : language === "ar"
+          ? `تم الدفع. رصيدك الجديد ${newBalance} دينار`
+          : `Payment successful. New balance ${newBalance} dinars`
+      );
+
+      setState("idle");
+    }}
+  />
+)}
+
 
       {/* Add Item Flow */}
       {(state === 'add-item' || state === 'add-quantity') && (

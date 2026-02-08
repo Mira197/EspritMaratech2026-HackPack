@@ -27,7 +27,6 @@ export interface PaymentDTO {
 }
 
 
-
 // ===================== SHOPPING =====================
 
 export async function addArticle(
@@ -37,11 +36,11 @@ export async function addArticle(
 ): Promise<any> {
 
   const payload: ArticleDTO = {
-  name,
-  price,
-  quantity,
-  user: "amira",
-};
+    name,
+    price,
+    quantity,
+    user: "amira",
+  };
 
   try {
     const res = await fetch(`${API_URL}/shopping/add`, {
@@ -115,6 +114,8 @@ export async function getTotal(): Promise<TotalResponse> {
   }
 }
 
+
+
 export async function getArticles(user: string) {
   try {
     const res = await fetch(`${API_URL}/shopping/items?user=${user}`);
@@ -122,11 +123,13 @@ export async function getArticles(user: string) {
     if (!res.ok) throw new Error("Erreur articles");
 
     return await res.json();
+
   } catch (e) {
     console.error(e);
     return [];
   }
 }
+
 
 
 // ===================== BANKING =====================
@@ -151,42 +154,25 @@ export async function getBalance(): Promise<BalanceResponse> {
 }
 
 
-export async function createStripeIntent(amount: number) {
-
-  console.log("Montant envoyé:", amount);
-
-  const res = await fetch("http://localhost:8000/stripe/create-intent", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      user: "amira",
-      amount: amount
-    })
-  });
-
-  const data = await res.json();
-
-  console.log("Réponse stripe:", data);
-
-  return data;
-}
-
 
 export async function confirmStripe(payment_intent: string, amount: number) {
+
+  // 👉 ON NETTOIE TOUJOURS
+  const cleanIntent = payment_intent.split("_secret")[0];
+
   const res = await fetch("http://localhost:8000/stripe/confirm", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       user: "amira",
-      payment_intent,
+      payment_intent: cleanIntent,
       amount
     })
   });
 
   return await res.json();
 }
+
 
 
 export async function makeTransfer(
@@ -280,6 +266,59 @@ export async function getPayments(): Promise<any[]> {
     return [];
   }
 }
+
+
+
+// ===================== STRIPE =====================
+
+export const createStripeIntent = async (data: {
+  user: string;
+  amount: number;
+}) => {
+
+  const response = await fetch(
+    `${API_URL}/stripe/create-intent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to create Stripe intent');
+  }
+
+  return response.json();
+};
+
+
+
+export const confirmStripePayment = async (data: {
+  user: string;
+  payment_intent: string;
+  amount: number;
+}) => {
+
+  const response = await fetch(
+    `${API_URL}/stripe/confirm`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to confirm Stripe payment');
+  }
+
+  return response.json();
+};
 
 
 

@@ -18,7 +18,10 @@ type BankingState =
   | 'checking-balance'
   | 'transfer-amount'
   | 'transfer-recipient'
-  | 'transfer-confirm';
+  | 'transfer-confirm'
+  | 'stripe-confirm'
+  | 'stripe-offer'
+| 'stripe-paying';
 
 const translations = {
   fr: {
@@ -201,23 +204,59 @@ export function BankingAssistant({
     }
 
     // 🔹 CONFIRMATION
-    if (state === 'transfer-confirm') {
-      if (
-        text.includes('oui') ||
-        text.includes('yes') ||
-        text.includes('نعم')
-      ) {
-        confirmTransfer();
-      }
+    // 🔹 CONFIRMATION VIREMENT CLASSIQUE
+if (state === 'transfer-confirm') {
+  if (
+    text.includes('oui') ||
+    text.includes('yes') ||
+    text.includes('نعم')
+  ) {
+    setState('stripe-offer');
 
-      if (
-        text.includes('non') ||
-        text.includes('no') ||
-        text.includes('لا')
-      ) {
-        cancelTransfer();
-      }
-    }
+    onVoiceResponse(
+      `Voulez-vous effectuer le virement de ${transferAmount} dinars avec Stripe ?`
+    );
+
+    onResetTranscript();
+  }
+
+  if (
+    text.includes('non') ||
+    text.includes('no') ||
+    text.includes('لا')
+  ) {
+    cancelTransfer();
+  }
+}
+
+// ======= ICI TU METS TON CODE =======
+
+// 🔹 CONFIRM STRIPE
+if (state === 'stripe-offer') {
+
+  if (
+    text.includes('oui') ||
+    text.includes('yes') ||
+    text.includes('نعم')
+  ) {
+
+    setState('stripe-paying');
+
+    onVoiceResponse(
+      language === "ar"
+        ? "تم الدفع بنجاح"
+        : language === "en"
+        ? "Payment completed successfully"
+        : "Paiement effectué avec succès"
+    );
+
+    // 🔥 ICI LE PAIEMENT SE LANCE
+    window.triggerStripePay?.();
+
+    onResetTranscript();
+  }
+}
+
   }, [transcript, state, transferAmount, t]);
 
   // ======= FONCTIONS BACK =======
@@ -278,8 +317,16 @@ export function BankingAssistant({
       <div className="mb-6">
         <h3 className="text-2xl mb-2">Recharger le compte</h3>
 
-        <StripePay />
+       <StripePay
+  amount={Number(transferAmount)}
+  onSuccess={async () => {
+    const data = await getBalance();
+    setBalance(data.balance);
 
+    onVoiceResponse("Paiement effectué et solde mis à jour");
+    setState("idle");
+  }}
+/>
         <button
           className="mt-2 bg-green-600 text-white px-4 py-2 rounded"
           onClick={async () => {

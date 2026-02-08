@@ -1,3 +1,4 @@
+//app/components/VoiceControls.tsx
 import React from 'react';
 import { Mic, MicOff, AlertCircle } from 'lucide-react';
 
