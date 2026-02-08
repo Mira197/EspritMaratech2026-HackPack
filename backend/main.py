@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routes.shopping import router as shopping_router
 from routes.banking import router as banking_router
-from routes.payment import router as payment_router
+from routes.stripe_pay import router as stripe_router
 
 from database import db
 
@@ -19,7 +19,7 @@ app.add_middleware(
 
 app.include_router(shopping_router, prefix="/shopping")
 app.include_router(banking_router, prefix="/bank")
-app.include_router(payment_router, prefix="/payment")
+app.include_router(stripe_router, prefix="/stripe")
 
 
 @app.get("/")

@@ -151,6 +151,43 @@ export async function getBalance(): Promise<BalanceResponse> {
 }
 
 
+export async function createStripeIntent(amount: number) {
+
+  console.log("Montant envoyé:", amount);
+
+  const res = await fetch("http://localhost:8000/stripe/create-intent", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      user: "amira",
+      amount: amount
+    })
+  });
+
+  const data = await res.json();
+
+  console.log("Réponse stripe:", data);
+
+  return data;
+}
+
+
+export async function confirmStripe(payment_intent: string, amount: number) {
+  const res = await fetch("http://localhost:8000/stripe/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user: "amira",
+      payment_intent,
+      amount
+    })
+  });
+
+  return await res.json();
+}
+
 
 export async function makeTransfer(
   to: string,
