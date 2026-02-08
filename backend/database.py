@@ -1,12 +1,7 @@
+# database.py
 from motor.motor_asyncio import AsyncIOMotorClient
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
+MONGO_URL = "mongodb://localhost:27017"
 
-client = AsyncIOMotorClient(os.getenv("MONGO_URI"))
-db = client[os.getenv("DB_NAME")]
-
-conv_col = db.conversations
-shopping_col = db.shopping
-bank_col = db.bank
+client = AsyncIOMotorClient(MONGO_URL)
+db = client["assistant_vocal"]

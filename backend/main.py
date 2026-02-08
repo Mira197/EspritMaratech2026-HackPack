@@ -1,6 +1,12 @@
+# main.py
 from fastapi import FastAPI
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+
+from routes.shopping import router as shopping_router
+from routes.banking import router as banking_router
+from routes.payment import router as payment_router
+
+from database import db
 
 app = FastAPI()
 
@@ -11,22 +17,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class Command(BaseModel):
-    text: str
+app.include_router(shopping_router, prefix="/shopping")
+app.include_router(banking_router, prefix="/bank")
+app.include_router(payment_router, prefix="/payment")
 
-@app.post("/voice-command")
-def voice(cmd: Command):
 
-    t = cmd.text.lower()
-
-    # LOGIQUE SIMPLE POUR TEST
-    if "banque" in t or "bank" in t:
-        return {"reply": "J’ouvre le module bancaire"}
-
-    if "course" in t or "shopping" in t:
-        return {"reply": "J’ouvre la liste de courses"}
-
-    if "bonjour" in t:
-        return {"reply": "Bonjour ! Comment puis-je vous aider ?"}
-
-    return {"reply": "Je n’ai pas compris la commande"}
+@app.get("/")
+def home():
+    return {"status": "backend connecté avec le front React"}
