@@ -1,12 +1,179 @@
-# 🎙️ Assistant Vocal Accessible - المساعد الصوتي الشامل
+# 🎙️ BASIRA – بصيرة  
+## Assistant Vocal Accessible  
+### #MaraTechEsprit2026
 
-**Une Progressive Web App (PWA) inclusive et accessible pour les personnes malvoyantes et seniors**
+![BASIRA Logo](./assets/logo-basira.png)
 
 ---
 
-## 🌟 Vue d'ensemble
+## 🌍 Présentation du projet
 
-Cette application est conçue pour être utilisable **entièrement par la voix** et compatible avec tous les principaux lecteurs d'écran (NVDA, JAWS, VoiceOver). Elle offre une interface accessible WCAG 2.1 AA avec support complet du français et de l'arabe.
+**BASIRA** est une **application web inclusive assistée par la voix**, développée lors du **Hackathon MaraTech 2026 (6–8 février 2026)**, visant à renforcer l’**autonomie numérique des personnes malvoyantes, non-voyantes et seniors**.
+
+L’application permet aux utilisateurs d’accéder à des **services essentiels (banque, courses)** **sans utiliser l’écran**, **uniquement par la voix**, grâce à une interface conforme aux normes d’accessibilité internationales.
+
+---
+
+## 🤝 Association bénéficiaire
+
+### Association IBSAR  
+**Association pour la Culture et les Loisirs des Non et Malvoyants – Tunis**
+
+IBSAR œuvre pour :
+- l’inclusion sociale,
+- l’autonomie numérique,
+- le renforcement des capacités des personnes en situation de handicap visuel.
+
+👉 **BASIRA** a été conçue spécifiquement pour répondre aux besoins exprimés par l’association IBSAR, dans le cadre du cahier des charges officiel du hackathon.
+
+---
+
+## 🎯 Problématique
+
+Les outils numériques actuels (applications bancaires, e-commerce, services en ligne) :
+- sont fortement dépendants de l’interface visuelle,
+- manquent de compatibilité avec les lecteurs d’écran,
+- créent une dépendance envers des tiers,
+- exposent les utilisateurs à des risques de sécurité.
+
+---
+
+## ✅ Objectif de BASIRA
+
+Développer une **plateforme web accessible**, pilotée par une **IA vocale**, permettant :
+
+- une **navigation 100 % mains libres**
+- une **interaction simple, naturelle et sécurisée**
+- une **autonomie totale de l’utilisateur**
+
+---
+
+## 👥 Équipe
+
+**Nom de l’équipe :** HackPack  
+
+**Membres :**
+- Aya Ben Fraj  
+- Nour Badreddine  
+- Amira Ouechtati  
+
+---
+
+## 🚀 Fonctionnalités principales
+
+### 🎤 1. Assistant vocal intelligent (MVP)
+- Compréhension du langage naturel (NLP)
+- Commandes vocales simples
+- Dialogue guidé étape par étape
+
+---
+
+### 🏦 2. Module Bancaire (Simulation)
+- Consultation du solde par la voix
+- Paiement avec **confirmation vocale**
+- Feedback audio clair après chaque action  
+
+⚠️ *Les transactions sont simulées dans le cadre du hackathon.*
+
+---
+
+### 🛒 3. Module Courses
+- Création et gestion d’une liste de courses
+- Ajout / suppression d’articles par la voix
+- Calcul automatique du total
+- Lecture vocale des prix
+
+---
+
+## 🗣️ Exemples de commandes vocales
+
+### Navigation
+| Français | العربية | Action |
+|--------|--------|-------|
+| banque | بنك | Accéder au module bancaire |
+| courses | تسوق | Liste de courses |
+| accueil | رئيسية | Retour accueil |
+| répéter | كرر | Répéter le message |
+
+### Paiement (simulation)
+- “payer” / “pay” / “نخلّص”
+- “oui” / “نعم” pour confirmer
+
+---
+
+## ♿ Accessibilité (Priorité du projet)
+
+BASIRA est conçue selon les normes :
+
+- ✅ **WCAG 2.1 – niveau AA**
+- ✅ Compatibilité lecteurs d’écran :
+  - NVDA
+  - JAWS
+  - VoiceOver
+- ✅ Navigation clavier complète
+- ✅ Mode contraste élevé
+- ✅ Zones ARIA et annonces vocales dynamiques
+
+---
+
+## 🛠️ Technologies utilisées
+- React 18
+- TypeScript
+- Vite
+- Tailwind CSS
+- Web Speech API
+- Speech Synthesis API
+- Python
+- FastAPI
+
+
+---
+
+## 📁 Project Structure
+```
+BASIRA/
+│
+├── backend/                      # Backend FastAPI
+│   ├── main.py                   # Point d’entrée de l’API
+│   ├── database.py               # Configuration base de données (locale)
+│   ├── requirements.txt          # Dépendances Python
+│   ├── routes/                   # Endpoints API
+│   │   ├── banking.py             # Logique bancaire (simulation)
+│   │   ├── shopping.py            # Gestion des courses
+│   │   └── voice.py               # Traitement commandes vocales
+│   ├── services/                 # Logique métier
+│   │   ├── payment_service.py     # Paiement (simulation)
+│   │   └── speech_service.py      # Interaction vocale
+│   └── models/                   # Modèles de données
+│
+├── frontend/                     # Application web accessible
+│   ├── public/                   # Assets publics
+│   │   └── logo-basira.png        # Logo du projet
+│   ├── src/
+│   │   ├── app/
+│   │   │   └── App.tsx            # Composant principal
+│   │   ├── components/            # Composants UI accessibles
+│   │   │   ├── BankingAssistant.tsx
+│   │   │   ├── ShoppingListAssistant.tsx
+│   │   │   └── VoiceControls.tsx
+│   │   ├── hooks/                 # Hooks personnalisés
+│   │   │   ├── useVoiceRecognition.ts
+│   │   │   └── useTextToSpeech.ts
+│   │   ├── services/              # Communication avec le backend
+│   │   │   └── paymentService.ts
+│   │   └── styles/                # Styles et accessibilité
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── ACCESSIBILITY.md               # Documentation accessibilité
+├── README.md                      # Documentation principale
+├── .gitignore
+└── package-lock.json
+```
+
+
+
 
 ### ✨ Caractéristiques principales
 
@@ -94,24 +261,18 @@ npm run build
 # ou
 pnpm build
 ```
+## ▶️ Utilisation
+
+1. Autoriser l’accès au microphone au premier lancement.
+2. Cliquer sur le bouton microphone ou appuyer sur **Espace**.
+3. Prononcer une commande vocale (ex : “banque”, “courses”).
+4. Suivre les instructions vocales de l’assistant.
 
 ### Installation en tant que PWA
 
 1. Ouvrir l'application dans Chrome, Edge ou Safari
 2. Cliquer sur "Installer" dans la barre d'adresse
 3. L'application sera disponible hors ligne
-
----
-
-## 🛠️ Technologies
-
-- **React 18** - Framework UI
-- **TypeScript** - Type safety
-- **Tailwind CSS v4** - Styling
-- **Web Speech API** - Reconnaissance vocale
-- **Speech Synthesis API** - Synthèse vocale
-- **Vite** - Build tool
-- **Lucide Icons** - Iconographie accessible
 
 ---
 
@@ -189,6 +350,11 @@ Les contributions sont les bienvenues ! Veuillez vous assurer que :
 - La navigation clavier fonctionne
 
 ---
+## 🚧 Statut du projet
+
+Ce projet a été développé en 48h dans le cadre du Hackathon MaraTech 2026.
+Il s’agit d’un prototype fonctionnel (MVP) destiné à démontrer la faisabilité
+et l’impact de la solution.
 
 ## 📄 Licence
 
@@ -220,3 +386,4 @@ Pour toute question ou problème d'accessibilité, veuillez ouvrir une issue Git
 ---
 
 **Made accessible for everyone. صُنع ليكون متاحًا للجميع.**
+#MaraTechEsprit2026
